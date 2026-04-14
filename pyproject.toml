@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-server-startos"
+version = "0.1.0"
+description = "MCP server for StartOS — wraps start-cli as Model Context Protocol tools"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Jeffrey Simon", email = "jsimon@10fir.com" },
+]
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+mcp-server-startos = "mcp_server_startos.server:main"
