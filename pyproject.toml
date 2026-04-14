@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-server-startos"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for StartOS — wraps start-cli as Model Context Protocol tools"
 readme = "README.md"
 license = "MIT"
@@ -15,6 +15,12 @@ authors = [
 dependencies = [
     "mcp>=1.0.0",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [project.scripts]
 mcp-server-startos = "mcp_server_startos.server:main"

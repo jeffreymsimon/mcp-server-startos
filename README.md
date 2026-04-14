@@ -2,7 +2,7 @@
 
 MCP (Model Context Protocol) server for [StartOS](https://start9.com) — exposes `start-cli` commands as MCP tools for use with Claude Code, Claude Desktop, and other MCP clients.
 
-**53 tools** covering packages, server diagnostics, networking, registry, backups, database, SSH keys, notifications, and multi-host fleet operations.
+**57 tools** covering packages, server diagnostics, networking, registry, backups, database, SSH keys, notifications, multi-host fleet operations, and high-level composite tools.
 
 ## Requirements
 
@@ -36,6 +36,28 @@ claude mcp add startos -- uv --directory /path/to/mcp-server-startos run mcp-ser
 | Variable | Default | Description |
 |---|---|---|
 | `START_CLI_PATH` | auto-detect | Path to the `start-cli` binary |
+
+## Composite Tools (high-level)
+
+These aggregate multiple CLI calls into a single rich response — reducing round-trips and giving the LLM better context.
+
+| Tool | Description |
+|---|---|
+| `package_inspect` | Version + status + logs + resource usage for a package in one call |
+| `system_health_summary` | Server metrics + package health + disk warnings + error log scan |
+| `fleet_compare` | Compare hosts: version diff, package inventory diff, resource comparison |
+| `get_server_info` | MCP server metadata: start-cli version, binary path, server version |
+
+## Diagnostic Flags
+
+All tools support `debug_trace: bool = False`. When enabled, returns a dict with:
+- `command` — the exact CLI command that was run
+- `raw_output` — raw stdout from start-cli
+- `duration_ms` — execution time in milliseconds
+- `exit_code` — process exit code
+- `parsed_output` — (JSON tools only) the parsed JSON output
+
+All mutating tools support `dry_run: bool = False`. When enabled, returns the CLI command that *would* be run without executing it.
 
 ## Tools
 
@@ -75,6 +97,7 @@ claude mcp add startos -- uv --directory /path/to/mcp-server-startos run mcp-ser
 | `server_kernel_logs` | Kernel logs |
 | `server_state` | Full API specification / system state schema |
 | `server_cpu_governor` | CPU governor options |
+| `get_server_info` | MCP server metadata: start-cli version, binary path |
 
 ### Network
 
@@ -143,6 +166,7 @@ Run queries across multiple StartOS hosts in parallel:
 | `fleet_device_info` | Device info from multiple hosts |
 | `fleet_metrics` | Server metrics from multiple hosts |
 | `fleet_package_list` | Package lists from multiple hosts |
+| `fleet_compare` | Full comparison: versions, packages, resources across hosts |
 
 ### Multi-host support
 
@@ -154,7 +178,17 @@ Every tool accepts an optional `host` parameter to target a specific StartOS ser
 # → calls package_list(host="http://haz1upstart001.local")
 #
 # "Compare packages across all hosts"
-# → calls fleet_package_list(hosts=["http://host1.local", "http://host2.local", ...])
+# → calls fleet_compare(hosts=["http://host1.local", "http://host2.local", ...])
+```
+
+## Development
+
+```bash
+# Install with dev dependencies
+uv pip install -e ".[dev]"
+
+# Run tests
+uv run pytest tests/ -v
 ```
 
 ## License

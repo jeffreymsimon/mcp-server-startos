@@ -1,0 +1,9 @@
+{
+  "cpu": {"percentage": 12.5, "idle": 87.5},
+  "memory": {"total": 16777216000, "used": 8388608000, "percentage": 50.0},
+  "disk": {
+    "/": {"total": 500000000000, "used": 450000000000},
+    "/data": {"total": 2000000000000, "used": 1000000000000}
+  },
+  "temperature": {"cpu": 52.0}
+}

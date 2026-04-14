@@ -31,19 +31,37 @@ That's it. No SDK reimplementation, no API reverse-engineering. Just a thin asyn
 
 ```python
 @mcp.tool(description="List all installed packages on a StartOS host.")
-async def package_list(host: str | None = None) -> dict | list:
-    return await run_cli_json("package", "list", host=host)
+async def package_list(host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("package", "list", host=host, debug_trace=debug_trace)
 ```
 
 The framework auto-generates JSON schemas from the type hints, handles the MCP protocol negotiation, and manages the stdio transport. We write zero boilerplate.
 
 **Multi-host**: Every single tool accepts an optional `host` parameter. If you say "check metrics on haz1upstart001", it passes `-H http://haz1upstart001.local` to start-cli. If you don't specify a host, it uses whatever `~/.startos/config.yaml` points to (currently muscular-boardroom.local = haz1upstart002).
 
-## The 53 Tools
+## The 57 Tools
 
-We started with 22 basic tools (list packages, get metrics, read logs) and then asked "what else is useful?" The answer was: everything.
+We started with 22 basic tools (list packages, get metrics, read logs) and then asked "what else is useful?" The answer was: everything. Then we asked "what would make Claude smarter about StartOS?" — and added composite tools.
 
-**The interesting ones**:
+### Composite Tools (the smart ones)
+
+These were added in v0.2.0 and are the highest-value improvement. Instead of making Claude call 4 separate tools and stitch the results together, these do it in one shot:
+
+- **`package_inspect`** — One call gives you a package's version, status, recent logs, AND resource usage. It runs 4 CLI calls in parallel under the hood. If one fails (say, logs aren't available), the others still return. This is the "tell me everything about bitcoind" tool.
+
+- **`system_health_summary`** — The "is everything OK?" tool. Grabs server metrics, checks all package statuses, scans recent logs for errors, and flags disk partitions over 85%. Returns a single `all_healthy: true/false` plus details on anything wrong. This is what you'd want Claude to call first thing in any diagnostics session.
+
+- **`fleet_compare`** — The "what's different across my hosts?" tool. Compares StartOS versions, diffs package inventories (what's on host A but not B), and shows resource usage side by side. Uses set operations on package IDs — simple but effective.
+
+### Diagnostic Flags
+
+Every tool now supports two opt-in flags:
+
+- **`debug_trace=True`** — Instead of just the result, you get back the exact CLI command, raw stdout, execution time in milliseconds, and exit code. Perfect for "why is this slow?" or "what command is it actually running?" debugging.
+
+- **`dry_run=True`** (mutating tools only) — Returns the CLI command that *would* be run without executing it. Like a safety net: "show me what you'd do before you do it."
+
+### The original interesting ones
 
 - **`package_action_get_input`** — This is the "look before you leap" tool. Before running a package action, you can inspect its form schema to see what fields it expects, what types they are, what the defaults are. It's like reading the instruction manual before pressing buttons.
 
@@ -65,6 +83,12 @@ We started with 22 basic tools (list packages, get metrics, read logs) and then 
 
 4. **The `host` parameter pattern is worth standardizing**. Every tool taking an optional host makes multi-host management seamless. The fleet tools just call the same single-host functions in parallel.
 
+5. **Composite tools beat primitive tools for LLM usage**. An LLM doesn't want to call `package_list`, then `package_stats`, then `package_logs`, then `package_installed_version` — it wants to call `package_inspect` and get everything at once. The key insight: aggregate in the MCP server, reason in the LLM. Don't put business logic in the server (no "recommend_actions" nonsense), but DO reduce round-trips.
+
+6. **`asyncio.gather(return_exceptions=True)` is essential for composites**. If you're running 4 CLI calls in parallel and one fails, you don't want to lose the other 3. The `_safe()` wrapper catches exceptions and returns error strings, so partial results always come through.
+
+7. **Permission gating belongs in the client, not the server**. We considered building an RBAC system (read-only vs operator vs admin modes), but Claude Code already prompts for tool approval. Adding another layer would just be redundant gatekeeping. `dry_run` covers the "show me before you do it" use case without a whole permission model.
+
 ## Tech Stack
 
 - **Python 3.10+** — type hints with `str | None` union syntax
@@ -72,14 +96,24 @@ We started with 22 basic tools (list packages, get metrics, read logs) and then 
 - **asyncio** — subprocess calls are async (non-blocking)
 - **start-cli 0.4.0-beta.5** — the actual StartOS CLI tool being wrapped
 - **uv** — package runner (handles deps and virtualenv)
+- **pytest + pytest-asyncio** — test harness with mocked subprocess layer
 
 ## File Layout
 
 ```
 src/mcp_server_startos/
-├── __init__.py     # empty
-├── cli.py          # 50 lines — finds start-cli, runs it, parses JSON
-└── server.py       # ~350 lines — 53 @mcp.tool() functions + main()
+├── __init__.py      # empty
+├── app.py           # 5 lines — shared FastMCP instance
+├── cli.py           # 90 lines — finds start-cli, runs it, parses JSON, dry_run/debug_trace
+├── composite.py     # 200 lines — package_inspect, system_health_summary, fleet_compare
+├── server.py        # 500 lines — 54 @mcp.tool() functions + main()
+└── version.py       # 15 lines — lazy-cached start-cli version detection
+
+tests/
+├── conftest.py      # shared fixtures and mocks
+├── test_cli.py      # 12 tests — subprocess wrapper, dry_run, debug_trace
+├── test_composite.py # 8 tests — composite tool aggregation and error handling
+└── fixtures/        # JSON snapshots of real start-cli output
 ```
 
-Two files of actual code. That's the whole thing.
+Five source files, 20 tests. Still a small, focused project.

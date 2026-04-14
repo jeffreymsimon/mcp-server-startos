@@ -3,11 +3,8 @@
 import asyncio
 import json
 
-from mcp.server.fastmcp import FastMCP
-
-from .cli import run_cli, run_cli_json
-
-mcp = FastMCP("startos")
+from .app import mcp
+from .cli import run_cli, run_cli_json, START_CLI
 
 
 # ---------------------------------------------------------------------------
@@ -16,8 +13,8 @@ mcp = FastMCP("startos")
 
 
 @mcp.tool(description="List all installed packages on a StartOS host. Returns JSON with package IDs, titles, versions, and status.")
-async def package_list(host: str | None = None) -> dict | list:
-    return await run_cli_json("package", "list", host=host)
+async def package_list(host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("package", "list", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Show recent logs for a specific package. Returns log text lines.")
@@ -25,18 +22,22 @@ async def package_logs(
     package_id: str,
     limit: int = 50,
     host: str | None = None,
+    debug_trace: bool = False,
 ) -> str:
-    return await run_cli("package", "logs", package_id, "-l", str(limit), host=host, timeout=15)
+    return await run_cli("package", "logs", package_id, "-l", str(limit), host=host, timeout=15, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Show LXC container stats (CPU, memory, PIDs) for installed packages. Returns JSON.")
-async def package_stats(host: str | None = None) -> dict | list:
-    return await run_cli_json("package", "stats", host=host)
+async def package_stats(host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("package", "stats", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Get the installed version of a specific package.")
-async def package_installed_version(package_id: str, host: str | None = None) -> str:
-    return (await run_cli("package", "installed-version", package_id, host=host)).strip()
+async def package_installed_version(package_id: str, host: str | None = None, debug_trace: bool = False) -> str:
+    result = await run_cli("package", "installed-version", package_id, host=host, debug_trace=debug_trace)
+    if debug_trace:
+        return result
+    return result.strip()
 
 
 @mcp.tool(description="Get the input specification (form schema) for a package action. Returns JSON describing the fields, types, defaults, and validation rules. Use this before package_action_run to understand what inputs an action expects.")
@@ -44,8 +45,9 @@ async def package_action_get_input(
     package_id: str,
     action_id: str,
     host: str | None = None,
+    debug_trace: bool = False,
 ) -> dict | list:
-    return await run_cli_json("package", "action", "get-input", package_id, action_id, host=host)
+    return await run_cli_json("package", "action", "get-input", package_id, action_id, host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Execute a command inside a running package's LXC container. Equivalent to 'docker exec'. Use for debugging: check configs, query databases, inspect processes inside the container.")
@@ -55,6 +57,7 @@ async def package_attach(
     subcontainer: str | None = None,
     user: str | None = None,
     host: str | None = None,
+    debug_trace: bool = False,
 ) -> str:
     args = ["package", "attach", package_id]
     if subcontainer:
@@ -62,7 +65,7 @@ async def package_attach(
     if user:
         args.extend(["-u", user])
     args.extend(command)
-    return await run_cli(*args, host=host, timeout=60)
+    return await run_cli(*args, host=host, timeout=60, debug_trace=debug_trace)
 
 
 @mcp.tool(description="List network host addresses for a package (domain names, bindings).")
@@ -70,8 +73,9 @@ async def package_host_address_list(
     package_id: str,
     host_id: str,
     host: str | None = None,
+    debug_trace: bool = False,
 ) -> str:
-    return await run_cli("package", "host", package_id, "address", host_id, "list", host=host)
+    return await run_cli("package", "host", package_id, "address", host_id, "list", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="List network host bindings for a package (port/protocol mappings).")
@@ -79,8 +83,9 @@ async def package_host_binding_list(
     package_id: str,
     host_id: str,
     host: str | None = None,
+    debug_trace: bool = False,
 ) -> str:
-    return await run_cli("package", "host", package_id, "binding", host_id, "list", host=host)
+    return await run_cli("package", "host", package_id, "binding", host_id, "list", host=host, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -89,38 +94,52 @@ async def package_host_binding_list(
 
 
 @mcp.tool(description="Get device information (hostname, platform, architecture, StartOS version). Returns JSON.")
-async def server_device_info(host: str | None = None) -> dict | list:
-    return await run_cli_json("server", "device-info", host=host)
+async def server_device_info(host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("server", "device-info", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Get server metrics (CPU, memory, disk usage, temperature). Returns JSON.")
-async def server_metrics(host: str | None = None) -> dict | list:
-    return await run_cli_json("server", "metrics", host=host)
+async def server_metrics(host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("server", "metrics", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Get server time and uptime.")
-async def server_time(host: str | None = None) -> str:
-    return (await run_cli("server", "time", host=host)).strip()
+async def server_time(host: str | None = None, debug_trace: bool = False) -> str:
+    result = await run_cli("server", "time", host=host, debug_trace=debug_trace)
+    if debug_trace:
+        return result
+    return result.strip()
 
 
 @mcp.tool(description="Show recent OS logs from the StartOS server.")
-async def server_logs(limit: int = 50, host: str | None = None) -> str:
-    return await run_cli("server", "logs", "-l", str(limit), host=host, timeout=15)
+async def server_logs(limit: int = 50, host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("server", "logs", "-l", str(limit), host=host, timeout=15, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Show recent kernel logs from the StartOS server.")
-async def server_kernel_logs(limit: int = 50, host: str | None = None) -> str:
-    return await run_cli("server", "kernel-logs", "-l", str(limit), host=host, timeout=15)
+async def server_kernel_logs(limit: int = 50, host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("server", "kernel-logs", "-l", str(limit), host=host, timeout=15, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Display the full API specification / system state schema.")
-async def server_state(host: str | None = None) -> str:
-    return await run_cli("state", host=host, timeout=15)
+async def server_state(host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("state", host=host, timeout=15, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Show CPU governor options for the server.")
-async def server_cpu_governor(host: str | None = None) -> str:
-    return await run_cli("server", "experimental", "governor", host=host)
+async def server_cpu_governor(host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("server", "experimental", "governor", host=host, debug_trace=debug_trace)
+
+
+@mcp.tool(description="Get MCP server metadata: start-cli version, binary path, server version.")
+async def get_server_info() -> dict:
+    from .version import get_cli_version
+    version = await get_cli_version()
+    return {
+        "mcp_server_version": "0.2.0",
+        "start_cli_version": version,
+        "start_cli_path": START_CLI,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -129,33 +148,33 @@ async def server_cpu_governor(host: str | None = None) -> str:
 
 
 @mcp.tool(description="Dump the DNS address resolution table.")
-async def net_dns_table(host: str | None = None) -> str:
-    return await run_cli("net", "dns", "dump-table", host=host)
+async def net_dns_table(host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("net", "dns", "dump-table", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Test DNS resolution for a specific fully-qualified domain name through the StartOS resolver.")
-async def net_dns_query(fqdn: str, host: str | None = None) -> dict | list:
-    return await run_cli_json("net", "dns", "query", fqdn, host=host)
+async def net_dns_query(fqdn: str, host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("net", "dns", "query", fqdn, host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Dump the port forward table.")
-async def net_forward_table(host: str | None = None) -> str:
-    return await run_cli("net", "forward", "dump-table", host=host)
+async def net_forward_table(host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("net", "forward", "dump-table", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Dump the vhost proxy table.")
-async def net_vhost_table(host: str | None = None) -> str:
-    return await run_cli("net", "vhost", "dump-table", host=host)
+async def net_vhost_table(host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("net", "vhost", "dump-table", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="List vhost SSL passthroughs (SNI-based TLS forwarding rules). Returns JSON.")
-async def net_vhost_list_passthrough(host: str | None = None) -> dict | list:
-    return await run_cli_json("net", "vhost", "list-passthrough", host=host)
+async def net_vhost_list_passthrough(host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("net", "vhost", "list-passthrough", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="List network gateways that StartOS can listen on. Returns JSON with gateway IDs, names, and types.")
-async def net_gateway_list(host: str | None = None) -> dict | list:
-    return await run_cli_json("net", "gateway", "list", host=host)
+async def net_gateway_list(host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("net", "gateway", "list", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Check if a specific port is reachable from the WAN on a given gateway. Useful for verifying port forwarding. Returns JSON.")
@@ -163,13 +182,14 @@ async def net_gateway_check_port(
     port: int,
     gateway: str,
     host: str | None = None,
+    debug_trace: bool = False,
 ) -> dict | list:
-    return await run_cli_json("net", "gateway", "check-port", str(port), gateway, host=host)
+    return await run_cli_json("net", "gateway", "check-port", str(port), gateway, host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Check DNS configuration for a gateway. Verifies that DNS records resolve correctly for services behind this gateway. Returns JSON.")
-async def net_gateway_check_dns(gateway: str, host: str | None = None) -> dict | list:
-    return await run_cli_json("net", "gateway", "check-dns", gateway, host=host)
+async def net_gateway_check_dns(gateway: str, host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("net", "gateway", "check-dns", gateway, host=host, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -178,13 +198,13 @@ async def net_gateway_check_dns(gateway: str, host: str | None = None) -> dict |
 
 
 @mcp.tool(description="List notifications on the StartOS server.")
-async def notification_list(host: str | None = None) -> str:
-    return await run_cli("notification", "list", host=host)
+async def notification_list(host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("notification", "list", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="List available backup targets.")
-async def backup_target_list(host: str | None = None) -> str:
-    return await run_cli("backup", "target", "list", host=host)
+async def backup_target_list(host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("backup", "target", "list", host=host, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Get detailed backup info for a specific package on a backup target. Requires target ID, server ID, and backup password. Returns JSON.")
@@ -193,9 +213,10 @@ async def backup_target_info(
     server_id: str,
     password: str,
     host: str | None = None,
+    debug_trace: bool = False,
 ) -> dict | list:
     return await run_cli_json(
-        "backup", "target", "info", target_id, server_id, password, host=host, timeout=60
+        "backup", "target", "info", target_id, server_id, password, host=host, timeout=60, debug_trace=debug_trace
     )
 
 
@@ -205,23 +226,23 @@ async def backup_target_info(
 
 
 @mcp.tool(description="List all packages and categories in a StartOS registry (marketplace). Requires registry URL (e.g. 'https://registry.start9.com'). Returns JSON.")
-async def registry_index(registry: str, host: str | None = None) -> dict | list:
-    return await run_cli_json("registry", "index", host=host, registry=registry, timeout=30)
+async def registry_index(registry: str, host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("registry", "index", host=host, registry=registry, timeout=30, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Get installation candidates for a specific package from a registry. Requires registry URL. Returns JSON.")
-async def registry_package_get(package_id: str, registry: str, host: str | None = None) -> dict | list:
-    return await run_cli_json("registry", "package", "get", package_id, host=host, registry=registry)
+async def registry_package_get(package_id: str, registry: str, host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("registry", "package", "get", package_id, host=host, registry=registry, debug_trace=debug_trace)
 
 
 @mcp.tool(description="List packages in a registry index with categories. Requires registry URL. Returns JSON.")
-async def registry_package_index(registry: str, host: str | None = None) -> dict | list:
-    return await run_cli_json("registry", "package", "index", host=host, registry=registry, timeout=30)
+async def registry_package_index(registry: str, host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("registry", "package", "index", host=host, registry=registry, timeout=30, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Query registry usage metrics. Requires registry URL. Returns JSON.")
-async def registry_metrics(registry: str, host: str | None = None) -> dict | list:
-    return await run_cli_json("registry", "metrics", host=host, registry=registry)
+async def registry_metrics(registry: str, host: str | None = None, debug_trace: bool = False) -> dict | list:
+    return await run_cli_json("registry", "metrics", host=host, registry=registry, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -234,13 +255,14 @@ async def db_dump(
     path: str | None = None,
     include_private: bool = False,
     host: str | None = None,
+    debug_trace: bool = False,
 ) -> dict | list:
     args = ["db", "dump"]
     if include_private:
         args.append("--include-private")
     if path:
         args.append(path)
-    return await run_cli_json(*args, host=host, timeout=30)
+    return await run_cli_json(*args, host=host, timeout=30, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +271,8 @@ async def db_dump(
 
 
 @mcp.tool(description="List SSH public keys authorized on the StartOS server.")
-async def ssh_list(host: str | None = None) -> str:
-    return await run_cli("ssh", "list", host=host)
+async def ssh_list(host: str | None = None, debug_trace: bool = False) -> str:
+    return await run_cli("ssh", "list", host=host, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -303,28 +325,28 @@ async def fleet_package_list(hosts: list[str]) -> dict:
 
 
 @mcp.tool(description="Install a package from a local .s9pk file path.")
-async def package_install(s9pk_path: str, host: str | None = None) -> str:
-    return await run_cli("package", "install", "-s", s9pk_path, host=host, timeout=300)
+async def package_install(s9pk_path: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("package", "install", "-s", s9pk_path, host=host, timeout=300, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Uninstall a package by ID.")
-async def package_uninstall(package_id: str, host: str | None = None) -> str:
-    return await run_cli("package", "uninstall", package_id, host=host, timeout=120)
+async def package_uninstall(package_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("package", "uninstall", package_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Start a stopped package.")
-async def package_start(package_id: str, host: str | None = None) -> str:
-    return await run_cli("package", "start", package_id, host=host, timeout=60)
+async def package_start(package_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("package", "start", package_id, host=host, timeout=60, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Stop a running package.")
-async def package_stop(package_id: str, host: str | None = None) -> str:
-    return await run_cli("package", "stop", package_id, host=host, timeout=60)
+async def package_stop(package_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("package", "stop", package_id, host=host, timeout=60, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Restart a package (stop + start).")
-async def package_restart(package_id: str, host: str | None = None) -> str:
-    return await run_cli("package", "restart", package_id, host=host, timeout=120)
+async def package_restart(package_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("package", "restart", package_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Run a package action by action ID. Use package_action_get_input first to discover required inputs. Returns the action result.")
@@ -332,15 +354,17 @@ async def package_action_run(
     package_id: str,
     action_id: str,
     host: str | None = None,
+    dry_run: bool = False,
+    debug_trace: bool = False,
 ) -> str:
     return await run_cli(
-        "package", "action", "run", package_id, action_id, host=host, timeout=120
+        "package", "action", "run", package_id, action_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace
     )
 
 
 @mcp.tool(description="Rebuild a package's LXC container. Useful after configuration changes or container issues.")
-async def package_rebuild(package_id: str, host: str | None = None) -> str:
-    return await run_cli("package", "rebuild", package_id, host=host, timeout=120)
+async def package_rebuild(package_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("package", "rebuild", package_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +380,8 @@ async def net_vhost_add_passthrough(
     public_gateway: str | None = None,
     private_ip: str | None = None,
     host: str | None = None,
+    dry_run: bool = False,
+    debug_trace: bool = False,
 ) -> str:
     args = [
         "net", "vhost", "add-passthrough",
@@ -367,15 +393,17 @@ async def net_vhost_add_passthrough(
         args.extend(["--public-gateway", public_gateway])
     if private_ip:
         args.extend(["--private-ip", private_ip])
-    return await run_cli(*args, host=host)
+    return await run_cli(*args, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Remove a vhost SSL passthrough rule.")
 async def net_vhost_remove_passthrough(
     hostname: str,
     host: str | None = None,
+    dry_run: bool = False,
+    debug_trace: bool = False,
 ) -> str:
-    return await run_cli("net", "vhost", "remove-passthrough", hostname, host=host)
+    return await run_cli("net", "vhost", "remove-passthrough", hostname, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Add a WireGuard tunnel. Provide the WireGuard config file contents and optional gateway type.")
@@ -385,23 +413,25 @@ async def net_tunnel_add(
     gateway_type: str | None = None,
     set_as_default_outbound: bool = False,
     host: str | None = None,
+    dry_run: bool = False,
+    debug_trace: bool = False,
 ) -> str:
     args = ["net", "tunnel", "add", name, config]
     if gateway_type:
         args.append(gateway_type)
     if set_as_default_outbound:
         args.append("--set-as-default-outbound")
-    return await run_cli(*args, host=host)
+    return await run_cli(*args, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Remove a tunnel by gateway ID.")
-async def net_tunnel_remove(gateway_id: str, host: str | None = None) -> str:
-    return await run_cli("net", "tunnel", "remove", gateway_id, host=host)
+async def net_tunnel_remove(gateway_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("net", "tunnel", "remove", gateway_id, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Set static DNS servers for the StartOS host.")
-async def net_dns_set_static(dns_servers: str, host: str | None = None) -> str:
-    return await run_cli("net", "dns", "set-static", dns_servers, host=host)
+async def net_dns_set_static(dns_servers: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("net", "dns", "set-static", dns_servers, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +440,8 @@ async def net_dns_set_static(dns_servers: str, host: str | None = None) -> str:
 
 
 @mcp.tool(description="Create a backup for all packages to the specified target.")
-async def backup_create(target: str, password: str, host: str | None = None) -> str:
-    return await run_cli("backup", "create", target, password, host=host, timeout=600)
+async def backup_create(target: str, password: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("backup", "create", target, password, host=host, timeout=600, dry_run=dry_run, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -424,11 +454,13 @@ async def db_apply(
     expr: str,
     path: str | None = None,
     host: str | None = None,
+    dry_run: bool = False,
+    debug_trace: bool = False,
 ) -> str:
     args = ["db", "apply", expr]
     if path:
         args.append(path)
-    return await run_cli(*args, host=host, timeout=30)
+    return await run_cli(*args, host=host, timeout=30, dry_run=dry_run, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -437,13 +469,13 @@ async def db_apply(
 
 
 @mcp.tool(description="Add an SSH public key to the StartOS server.")
-async def ssh_add(public_key: str, host: str | None = None) -> str:
-    return await run_cli("ssh", "add", public_key, host=host)
+async def ssh_add(public_key: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("ssh", "add", public_key, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Remove an SSH key from the StartOS server by fingerprint or key content.")
-async def ssh_remove(key_identifier: str, host: str | None = None) -> str:
-    return await run_cli("ssh", "remove", key_identifier, host=host)
+async def ssh_remove(key_identifier: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("ssh", "remove", key_identifier, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 # ---------------------------------------------------------------------------
@@ -452,16 +484,17 @@ async def ssh_remove(key_identifier: str, host: str | None = None) -> str:
 
 
 @mcp.tool(description="Mark notifications as seen by their IDs.")
-async def notification_mark_seen(notification_ids: list[str], host: str | None = None) -> str:
-    return await run_cli("notification", "mark-seen", *notification_ids, host=host)
+async def notification_mark_seen(notification_ids: list[str], host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("notification", "mark-seen", *notification_ids, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 @mcp.tool(description="Remove notifications by their IDs.")
-async def notification_remove(notification_ids: list[str], host: str | None = None) -> str:
-    return await run_cli("notification", "remove", *notification_ids, host=host)
+async def notification_remove(notification_ids: list[str], host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
+    return await run_cli("notification", "remove", *notification_ids, host=host, dry_run=dry_run, debug_trace=debug_trace)
 
 
 def main():
+    from . import composite  # noqa: F401 — registers composite tools on mcp
     mcp.run(transport="stdio")
 
 

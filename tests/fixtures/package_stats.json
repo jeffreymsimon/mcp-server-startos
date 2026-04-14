@@ -1,0 +1,6 @@
+[
+  {"id": "bitcoind", "cpu": 5.2, "memory": 1073741824, "pids": 3},
+  {"id": "lnd", "cpu": 1.1, "memory": 536870912, "pids": 2},
+  {"id": "netbox", "cpu": 2.3, "memory": 268435456, "pids": 8},
+  {"id": "vaultwarden", "cpu": 0.0, "memory": 0, "pids": 0}
+]
