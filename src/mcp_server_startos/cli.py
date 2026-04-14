@@ -25,10 +25,12 @@ def _find_start_cli() -> str:
 START_CLI = _find_start_cli()
 
 
-async def run_cli(*args: str, host: str | None = None, timeout: int = 30) -> str:
+async def run_cli(*args: str, host: str | None = None, registry: str | None = None, timeout: int = 30) -> str:
     cmd = [START_CLI]
     if host:
         cmd.extend(["-H", host])
+    if registry:
+        cmd.extend(["-r", registry])
     cmd.extend(args)
 
     proc = await asyncio.create_subprocess_exec(
@@ -45,6 +47,6 @@ async def run_cli(*args: str, host: str | None = None, timeout: int = 30) -> str
     return stdout.decode()
 
 
-async def run_cli_json(*args: str, host: str | None = None, timeout: int = 30) -> dict | list:
-    raw = await run_cli(*args, "--format", "json", host=host, timeout=timeout)
+async def run_cli_json(*args: str, host: str | None = None, registry: str | None = None, timeout: int = 30) -> dict | list:
+    raw = await run_cli(*args, "--format", "json", host=host, registry=registry, timeout=timeout)
     return json.loads(raw)

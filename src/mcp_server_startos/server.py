@@ -105,12 +105,12 @@ async def server_time(host: str | None = None) -> str:
 
 @mcp.tool(description="Show recent OS logs from the StartOS server.")
 async def server_logs(limit: int = 50, host: str | None = None) -> str:
-    return await run_cli("diagnostic", "logs", "-l", str(limit), host=host, timeout=15)
+    return await run_cli("server", "logs", "-l", str(limit), host=host, timeout=15)
 
 
 @mcp.tool(description="Show recent kernel logs from the StartOS server.")
 async def server_kernel_logs(limit: int = 50, host: str | None = None) -> str:
-    return await run_cli("diagnostic", "kernel-logs", "-l", str(limit), host=host, timeout=15)
+    return await run_cli("server", "kernel-logs", "-l", str(limit), host=host, timeout=15)
 
 
 @mcp.tool(description="Display the full API specification / system state schema.")
@@ -204,24 +204,24 @@ async def backup_target_info(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(description="List all packages and categories in the connected registry (marketplace). Returns JSON with available packages, versions, and descriptions.")
-async def registry_index(host: str | None = None) -> dict | list:
-    return await run_cli_json("registry", "index", host=host, timeout=30)
+@mcp.tool(description="List all packages and categories in a StartOS registry (marketplace). Requires registry URL (e.g. 'https://registry.start9.com'). Returns JSON.")
+async def registry_index(registry: str, host: str | None = None) -> dict | list:
+    return await run_cli_json("registry", "index", host=host, registry=registry, timeout=30)
 
 
-@mcp.tool(description="Get installation candidates for a specific package from the registry. Shows available versions and compatibility. Returns JSON.")
-async def registry_package_get(package_id: str, host: str | None = None) -> dict | list:
-    return await run_cli_json("registry", "package", "get", package_id, host=host)
+@mcp.tool(description="Get installation candidates for a specific package from a registry. Requires registry URL. Returns JSON.")
+async def registry_package_get(package_id: str, registry: str, host: str | None = None) -> dict | list:
+    return await run_cli_json("registry", "package", "get", package_id, host=host, registry=registry)
 
 
-@mcp.tool(description="List packages in the registry index with categories. Returns JSON.")
-async def registry_package_index(host: str | None = None) -> dict | list:
-    return await run_cli_json("registry", "package", "index", host=host, timeout=30)
+@mcp.tool(description="List packages in a registry index with categories. Requires registry URL. Returns JSON.")
+async def registry_package_index(registry: str, host: str | None = None) -> dict | list:
+    return await run_cli_json("registry", "package", "index", host=host, registry=registry, timeout=30)
 
 
-@mcp.tool(description="Query registry usage metrics. Returns JSON.")
-async def registry_metrics(host: str | None = None) -> dict | list:
-    return await run_cli_json("registry", "metrics", host=host)
+@mcp.tool(description="Query registry usage metrics. Requires registry URL. Returns JSON.")
+async def registry_metrics(registry: str, host: str | None = None) -> dict | list:
+    return await run_cli_json("registry", "metrics", host=host, registry=registry)
 
 
 # ---------------------------------------------------------------------------
