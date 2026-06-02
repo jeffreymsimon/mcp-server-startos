@@ -8,6 +8,9 @@ import pytest
 
 from mcp_server_startos.cli import run_cli, run_cli_json
 
+DEVNULL = asyncio.subprocess.DEVNULL
+PIPE = asyncio.subprocess.PIPE
+
 
 @pytest.fixture
 def mock_proc():
@@ -150,3 +153,51 @@ async def test_run_cli_json_debug_trace(patched_subprocess):
     assert result["parsed_output"]["count"] == 5
     assert "command" in result
     assert "duration_ms" in result
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for Redmine #1258 (action run hang / silent "Error: ")
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_cli_defaults_stdin_to_devnull(patched_subprocess):
+    """No stdin_data -> child must get DEVNULL, never the inherited JSON-RPC pipe.
+
+    A child that inherits the MCP server's stdin can block forever reading an
+    action input body that never arrives — the #1258 hang.
+    """
+    create_sub, proc = patched_subprocess
+    await run_cli("package", "action", "run", "openbrain", "issue-capture-token")
+    assert create_sub.call_args.kwargs["stdin"] is DEVNULL
+    # No input is piped when stdin_data is None.
+    assert proc.communicate.call_args.kwargs.get("input") is None
+
+
+@pytest.mark.asyncio
+async def test_run_cli_stdin_data_pipes_input(patched_subprocess):
+    """stdin_data -> child gets a PIPE and the encoded body is written to it."""
+    create_sub, proc = patched_subprocess
+    body = json.dumps({"label": "x"})
+    await run_cli(
+        "package", "action", "run", "openbrain", "issue-capture-token",
+        "--event-id", "ABC", stdin_data=body,
+    )
+    assert create_sub.call_args.kwargs["stdin"] is PIPE
+    assert proc.communicate.call_args.kwargs["input"] == body.encode()
+
+
+@pytest.mark.asyncio
+async def test_run_cli_timeout_raises_nonempty_error(patched_subprocess):
+    """A timeout must raise a RuntimeError with a NON-EMPTY message.
+
+    A bare asyncio.TimeoutError stringifies to "" and FastMCP renders it as the
+    mysterious "Error: " with no body (#1258). The wrapper must convert it.
+    """
+    create_sub, proc = patched_subprocess
+    proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    with pytest.raises(RuntimeError, match="timed out"):
+        await run_cli("package", "action", "run", "openbrain", "x", timeout=1)
+    proc.kill.assert_called_once()

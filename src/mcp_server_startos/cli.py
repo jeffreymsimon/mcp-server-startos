@@ -33,6 +33,7 @@ async def run_cli(
     timeout: int = 30,
     dry_run: bool = False,
     debug_trace: bool = False,
+    stdin_data: str | None = None,
 ) -> str | dict:
     cmd = [START_CLI]
     if host:
@@ -46,12 +47,43 @@ async def run_cli(
 
     t0 = time.monotonic() if debug_trace else 0
 
+    # CRITICAL: never let the child inherit the MCP server's stdin (the JSON-RPC
+    # pipe from the client). Some start-cli subcommands — notably
+    # `package action run` without --event-id — block reading an input body from
+    # stdin. With the JSON-RPC pipe inherited, that read never returns and the
+    # whole tool call hangs until the wrap timeout (Redmine #1258). We feed an
+    # explicit stdin: either the caller-supplied input JSON, or a closed pipe.
+    if stdin_data is not None:
+        stdin_mode = asyncio.subprocess.PIPE
+        stdin_bytes: bytes | None = stdin_data.encode()
+    else:
+        stdin_mode = asyncio.subprocess.DEVNULL
+        stdin_bytes = None
+
     proc = await asyncio.create_subprocess_exec(
         *cmd,
+        stdin=stdin_mode,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=stdin_bytes), timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        # Kill the orphaned child and surface a NON-EMPTY error. A bare
+        # asyncio.TimeoutError stringifies to "" and FastMCP renders it as the
+        # mysterious "Error: " with no body (Redmine #1258).
+        try:
+            proc.kill()
+            await proc.wait()
+        except ProcessLookupError:
+            pass
+        raise RuntimeError(
+            f"start-cli timed out after {timeout}s: {' '.join(cmd)}. "
+            "If this is `package action run`, the action likely requires an "
+            "input body — pass `inputs` so the wrapper can supply --event-id + stdin."
+        )
 
     if debug_trace:
         duration_ms = round((time.monotonic() - t0) * 1000)

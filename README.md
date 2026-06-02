@@ -83,7 +83,7 @@ All mutating tools support `dry_run: bool = False`. When enabled, returns the CL
 | `package_start` | Start a package |
 | `package_stop` | Stop a package |
 | `package_restart` | Restart a package |
-| `package_action_run` | Run a package action |
+| `package_action_run` | Run a package action. For actions with an input spec (`sdk.Action.withInput`), pass `inputs` (the full input object); the wrapper performs the get-input → run `--event-id` handshake automatically. |
 | `package_rebuild` | Rebuild a package's LXC container |
 
 ### Server

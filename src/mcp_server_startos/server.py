@@ -349,16 +349,51 @@ async def package_restart(package_id: str, host: str | None = None, dry_run: boo
     return await run_cli("package", "restart", package_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace)
 
 
-@mcp.tool(description="Run a package action by action ID. Use package_action_get_input first to discover required inputs. Returns the action result.")
+@mcp.tool(description=(
+    "Run a package action by action ID. For actions WITHOUT an input spec, omit "
+    "`inputs`. For actions WITH an input spec (defined via sdk.Action.withInput), "
+    "pass `inputs` as a dict of the FULL input object — every required field of "
+    "the spec, not just the ones you're changing. Call package_action_get_input "
+    "first to discover the spec and current values; merge your changes onto the "
+    "returned `value` object and pass that whole object as `inputs`. The wrapper "
+    "handles the event-id handshake automatically. Returns the action result."
+))
 async def package_action_run(
     package_id: str,
     action_id: str,
+    inputs: dict | None = None,
     host: str | None = None,
     dry_run: bool = False,
     debug_trace: bool = False,
 ) -> str:
+    # Actions with no input spec: a plain run with no --event-id, no stdin body.
+    # run_cli now feeds stdin=DEVNULL so this can never block (Redmine #1258).
+    if inputs is None:
+        return await run_cli(
+            "package", "action", "run", package_id, action_id,
+            host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace,
+        )
+
+    # Actions WITH an input spec require the two-step handshake:
+    #   1. get-input  -> {eventId, spec, value}
+    #   2. run --event-id <id>  with the FULL input JSON on stdin
+    # get-input is single-use per eventId, so we fetch a fresh one each run.
+    if dry_run:
+        return (
+            f"{START_CLI} package action get-input {package_id} {action_id} --format json"
+            f"  &&  echo <inputs-json> | {START_CLI} package action run "
+            f"{package_id} {action_id} --event-id <eventId>"
+        )
+
+    spec = await run_cli_json(
+        "package", "action", "get-input", package_id, action_id, host=host,
+    )
+    event_id = spec["eventId"]
     return await run_cli(
-        "package", "action", "run", package_id, action_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace
+        "package", "action", "run", package_id, action_id,
+        "--event-id", event_id,
+        host=host, timeout=120, debug_trace=debug_trace,
+        stdin_data=json.dumps(inputs),
     )
 
 

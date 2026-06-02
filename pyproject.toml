@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-server-startos"
-version = "0.2.0"
+version = "0.2.1"
 description = "MCP server for StartOS — wraps start-cli as Model Context Protocol tools"
 readme = "README.md"
 license = "MIT"
