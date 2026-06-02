@@ -80,9 +80,9 @@ All mutating tools support `dry_run: bool = False`. When enabled, returns the CL
 |---|---|
 | `package_install` | Install from .s9pk file |
 | `package_uninstall` | Uninstall a package |
-| `package_start` | Start a package |
-| `package_stop` | Stop a package |
-| `package_restart` | Restart a package |
+| `package_start` | Start a package. Verifies the container is up via `package stats` afterward (`verify=True` default) and raises if not — start-cli's exit code alone is not proof (Redmine #1264). |
+| `package_stop` | Stop a package. Verifies the container is down afterward and raises if it's still running. |
+| `package_restart` | Restart a package. Verifies it's running afterward; cannot positively confirm the container bounced (container_id is stable), so reports success with a caveat. If the daemon no-ops restart (#1264), use the StartOS web UI. |
 | `package_action_run` | Run a package action. For actions with an input spec (`sdk.Action.withInput`), pass `inputs` (the full input object); the wrapper performs the get-input → run `--event-id` handshake automatically. |
 | `package_rebuild` | Rebuild a package's LXC container |
 

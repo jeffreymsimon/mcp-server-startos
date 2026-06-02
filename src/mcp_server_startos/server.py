@@ -8,6 +8,37 @@ from .cli import run_cli, run_cli_json, START_CLI
 
 
 # ---------------------------------------------------------------------------
+# Lifecycle verification (Redmine #1264)
+# ---------------------------------------------------------------------------
+#
+# `start-cli package start|stop|restart` returns exit 0 even when the StartOS
+# daemon silently no-ops the request (observed on the haz1upstart003 daemon
+# build: the package.stop RPC returns {"result": null} but the LXC container
+# keeps running). The CLI's exit code is therefore NOT proof that the lifecycle
+# change happened. These helpers poll `package stats` (which lists only RUNNING
+# containers) to confirm the package reached the requested state, so the tool
+# reports REAL success/failure instead of CLI-accepted.
+
+async def _is_running(package_id: str, host: str | None) -> bool:
+    """True if package_id appears in `package stats` (i.e. its container is up)."""
+    stats = await run_cli_json("package", "stats", host=host)
+    if isinstance(stats, dict):
+        return package_id in stats
+    # Some builds return a list of {id: ...} records.
+    return any(isinstance(p, dict) and p.get("id") == package_id for p in stats)
+
+
+async def _verify_state(package_id: str, host: str | None, want_running: bool,
+                        attempts: int = 6, delay: float = 1.5) -> bool:
+    """Poll until the package reaches want_running, or give up. Returns reached?"""
+    for _ in range(attempts):
+        if await _is_running(package_id, host) == want_running:
+            return True
+        await asyncio.sleep(delay)
+    return await _is_running(package_id, host) == want_running
+
+
+# ---------------------------------------------------------------------------
 # Read-only: Packages
 # ---------------------------------------------------------------------------
 
@@ -334,19 +365,68 @@ async def package_uninstall(package_id: str, host: str | None = None, dry_run: b
     return await run_cli("package", "uninstall", package_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace)
 
 
-@mcp.tool(description="Start a stopped package.")
-async def package_start(package_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
-    return await run_cli("package", "start", package_id, host=host, timeout=60, dry_run=dry_run, debug_trace=debug_trace)
+@mcp.tool(description=(
+    "Start a stopped package. By default (verify=True) the tool polls "
+    "`package stats` to confirm the container actually came up and raises if it "
+    "didn't — the start-cli exit code alone is not proof (Redmine #1264)."
+))
+async def package_start(package_id: str, host: str | None = None, verify: bool = True,
+                        dry_run: bool = False, debug_trace: bool = False) -> str:
+    out = await run_cli("package", "start", package_id, host=host, timeout=60, dry_run=dry_run, debug_trace=debug_trace)
+    if dry_run or debug_trace:
+        return out
+    if verify and not await _verify_state(package_id, host, want_running=True):
+        raise RuntimeError(
+            f"package_start {package_id}: start-cli returned success but the container "
+            f"is NOT running in `package stats` after polling. The daemon likely no-opped "
+            f"the request (Redmine #1264). Try the StartOS web UI."
+        )
+    return out or f"{package_id} started (verified running)."
 
 
-@mcp.tool(description="Stop a running package.")
-async def package_stop(package_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
-    return await run_cli("package", "stop", package_id, host=host, timeout=60, dry_run=dry_run, debug_trace=debug_trace)
+@mcp.tool(description=(
+    "Stop a running package. By default (verify=True) the tool polls "
+    "`package stats` to confirm the container actually went down and raises if it "
+    "didn't — the start-cli exit code alone is not proof (Redmine #1264)."
+))
+async def package_stop(package_id: str, host: str | None = None, verify: bool = True,
+                       dry_run: bool = False, debug_trace: bool = False) -> str:
+    out = await run_cli("package", "stop", package_id, host=host, timeout=60, dry_run=dry_run, debug_trace=debug_trace)
+    if dry_run or debug_trace:
+        return out
+    if verify and not await _verify_state(package_id, host, want_running=False):
+        raise RuntimeError(
+            f"package_stop {package_id}: start-cli returned success but the container is "
+            f"STILL running in `package stats` after polling. The daemon likely no-opped "
+            f"the request (Redmine #1264). Try the StartOS web UI."
+        )
+    return out or f"{package_id} stopped (verified down)."
 
 
-@mcp.tool(description="Restart a package (stop + start).")
-async def package_restart(package_id: str, host: str | None = None, dry_run: bool = False, debug_trace: bool = False) -> str:
-    return await run_cli("package", "restart", package_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace)
+@mcp.tool(description=(
+    "Restart a package (stop + start). By default (verify=True) the tool confirms "
+    "the package is running afterward and raises if it is not. NOTE: because a "
+    "package's container_id is stable across restarts, verification can confirm the "
+    "package is UP afterward but cannot positively prove the container actually "
+    "bounced. If the daemon no-ops restart (Redmine #1264), this returns success "
+    "with a caveat — use the StartOS web UI when a guaranteed bounce is required."
+))
+async def package_restart(package_id: str, host: str | None = None, verify: bool = True,
+                          dry_run: bool = False, debug_trace: bool = False) -> str:
+    out = await run_cli("package", "restart", package_id, host=host, timeout=120, dry_run=dry_run, debug_trace=debug_trace)
+    if dry_run or debug_trace:
+        return out
+    if verify and not await _verify_state(package_id, host, want_running=True):
+        raise RuntimeError(
+            f"package_restart {package_id}: start-cli returned success but the package is "
+            f"NOT running in `package stats` after polling — restart left it down. "
+            f"The daemon may have no-opped the request (Redmine #1264). Try the StartOS web UI."
+        )
+    return out or (
+        f"{package_id} is running after restart. NOTE: cannot positively confirm the "
+        f"container bounced (container_id is stable across restarts); if a guaranteed "
+        f"restart is required, verify via logs or the web UI (Redmine #1264)."
+    )
 
 
 @mcp.tool(description=(
